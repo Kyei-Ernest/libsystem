@@ -1,0 +1,81 @@
+# Alert Rules for LibSystem
+
+groups:
+  - name: service_alerts
+    interval: 30s
+    rules:
+      # Service Down Alert
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.service }} is down"
+          description: "{{ $labels.service }} has been down for more than 2 minutes."
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} has error rate above 5% (current: {{ $value }})"
+
+      # High Response Time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time on {{ $labels.service }}"
+          description: "95th percentile response time is {{ $value }}s on {{ $labels.service }}"
+
+  - name: resource_alerts
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCPU
+        expr: process_cpu_seconds_total > 0.8
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.service }}"
+          description: "CPU usage is above 80% for 15 minutes"
+
+      # High Memory Usage
+      - alert: HighMemory
+        expr: process_resident_memory_bytes / 1024 / 1024 > 1000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.service }}"
+          description: "Memory usage is above 1GB"
+
+  - name: business_alerts
+    interval: 1m
+    rules:
+      # Indexing Lag
+      - alert: IndexingLag
+        expr: (time() - timestamp(last_indexed_document_timestamp)) > 600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Document indexing is lagging"
+          description: "No documents indexed in the last 10 minutes"
+
+      # Failed Document Uploads
+      - alert: FailedUploads
+        expr: rate(document_upload_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High document upload failure rate"
+          description: "Upload failure rate is {{ $value }} per second"

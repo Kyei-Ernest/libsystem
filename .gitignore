@@ -1,0 +1,35 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+vendor/
+
+# Large Binaries / Tools
+elasticsearch-*/
+kafka_*/
+infrastructure/grafana-*/
+*.tar.gz
+*.tar.gz.*
+
+# Logs
+logs/
+*.log
+final_test.txt
+code.txt
+
+# Local Scripts with Secrets
+test-upload.sh
+
+# Build Artifacts
+.next/
+dist/
+build/
+bin/
+*.tsbuildinfo
+
+# OS System Files
+.DS_Store
+Thumbs.db

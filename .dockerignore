@@ -1,0 +1,16 @@
+.git
+.gitignore
+README.md
+.env
+.env.*
+*.md
+docker-compose*.yml
+Makefile
+.vscode
+.idea
+*.log
+tmp/
+logs/
+backups/
+coverage.html
+*.test

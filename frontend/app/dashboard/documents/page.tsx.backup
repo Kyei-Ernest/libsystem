@@ -1,0 +1,279 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { documentsApi } from '@/lib/api/documents';
+import { collectionsApi } from '@/lib/api/collections';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
+import { FileText, Download, Trash2, MoreVertical, Upload, Search } from 'lucide-react';
+import type { Document, Collection } from '@/types/api';
+import { formatBytes } from '@/lib/utils';
+
+export default function DocumentsPage() {
+    const router = useRouter();
+    const [documents, setDocuments] = useState<Document[]>([]);
+    const [collections, setCollections] = useState<Collection[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+
+    // Filter states
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCollection, setSelectedCollection] = useState<string>('all');
+    const pageSize = 12;
+
+    useEffect(() => {
+        loadDocuments();
+    }, [currentPage, debouncedQuery]);
+
+    const loadDocuments = async () => {
+        try {
+            setIsLoading(true);
+
+            if (debouncedQuery.trim()) {
+                // Search Mode
+                try {
+                    const result = await searchApi.search(debouncedQuery, currentPage, 10);
+                    setDocuments(result.hits || []);
+                    setTotalPages(Math.ceil(result.total / 10) || 1);
+                } catch (err) {
+                    console.error('Search failed:', err);
+                    toast.error('Search failed, showing all documents instead');
+                    setDocuments([]);
+                    setTotalPages(1);
+                }
+            } else {
+                // List Mode
+                const params: any = {
+                    page: currentPage,
+                    limit: pageSize,
+                };
+
+                // Add collection filter if selected
+                if (selectedCollection !== 'all') {
+                    params.collection_id = selectedCollection;
+                }
+
+                const response = await documentsApi.list(params);
+                setDocuments(response.data || []);
+                setTotalPages(response.pagination?.total_pages || 1);
+            }
+        } catch (error) {
+            console.error('Failed to load documents:', error);
+            toast.error('Failed to load documents');
+            setDocuments([]); // Ensure documents is always an array
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const loadCollections = async () => {
+        try {
+            const response = await collectionsApi.list();
+            setCollections(response.data || []);
+        } catch (error) {
+            console.error('Failed to load collections:', error);
+            toast.error('Failed to load collections');
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this document?')) return;
+
+        try {
+            await documentsApi.delete(id);
+            toast.success('Document deleted successfully');
+            loadDocuments();
+        } catch (error) {
+            console.error('Delete failed:', error);
+            toast.error('Failed to delete document');
+        }
+    };
+
+    const handleDownload = (id: string, filename: string) => {
+        const downloadUrl = documentsApi.getDownloadUrl(id);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // Filter documents by search query (client-side)
+    const filteredDocuments = documents.filter(doc => {
+        if (!searchQuery) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+            doc.title?.toLowerCase().includes(query) ||
+            doc.original_filename?.toLowerCase().includes(query) ||
+            doc.description?.toLowerCase().includes(query)
+        );
+    });
+
+    // Helper to get icon based on file type
+    const getFileIcon = (fileType: string) => {
+        return <FileText className="h-10 w-10 text-muted-foreground" />;
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Documents</h2>
+                    <p className="text-muted-foreground">Manage and organize your document library</p>
+                </div>
+                <Button onClick={() => router.push('/dashboard/documents/upload')}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Document
+                </Button>
+            </div>
+
+            {/* Search & Filters */}
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="flex gap-4">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Search documents..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+                        <Button variant="outline" size="icon">
+                            <Filter className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Documents List */}
+            {isLoading ? (
+                <Card>
+                    <CardContent className="pt-6">
+                        <p className="text-center text-muted-foreground">Loading documents...</p>
+                    </CardContent>
+                </Card>
+            ) : filteredDocuments.length === 0 ? (
+                <Card>
+                    <CardContent className="pt-6 text-center">
+                        <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">No documents found</h3>
+                        <p className="text-muted-foreground mb-4">
+                            {searchQuery ? 'Try adjusting your search' : 'Get started by uploading your first document'}
+                        </p>
+                        {!searchQuery && (
+                            <Button onClick={() => router.push('/dashboard/documents/upload')}>
+                                <Upload className="mr-2 h-4 w-4" />
+                                Upload Document
+                            </Button>
+                        )}
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="grid gap-4">
+                    {filteredDocuments.map((doc) => (
+                        <Card key={doc.id} className="hover:shadow-md transition-shadow">
+                            <CardHeader>
+                                <div className="flex items-start gap-4">
+                                    {/* File Type Icon or Thumbnail */}
+                                    <div
+                                        className="flex-shrink-0 mt-1 w-10 h-10 cursor-pointer"
+                                        onClick={() => router.push(`/dashboard/documents/${doc.id}`)}
+                                    >
+                                        {doc.thumbnail_path ? (
+                                            <img
+                                                src={documentsApi.getThumbnailUrl(doc.id)}
+                                                alt="Thumbnail"
+                                                className="w-full h-full object-cover rounded shadow-sm"
+                                            />
+                                        ) : (
+                                            getFileIcon(doc.file_type)
+                                        )}
+                                    </div>
+
+                                    {/* Document Info */}
+                                    <div
+                                        className="flex-1 min-w-0 cursor-pointer"
+                                        onClick={() => router.push(`/dashboard/documents/${doc.id}`)}
+                                    >
+                                        <CardTitle className="text-lg truncate hover:text-primary">{doc.title || doc.original_filename}</CardTitle>
+                                        <CardDescription className="mt-1">
+                                            {doc.title !== doc.original_filename && <>{doc.original_filename} • </>}
+                                            {formatBytes(doc.file_size)} • {doc.file_type}
+                                        </CardDescription>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-2 flex-shrink-0">
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            onClick={() => handleDownload(doc.id)}
+                                            title="Download"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            onClick={() => handleDelete(doc.id)}
+                                            title="Delete"
+                                            className="text-red-600 hover:text-red-700"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            {doc.description && (
+                                <CardContent className="pt-0 pb-4">
+                                    <p className="text-sm text-muted-foreground line-clamp-2">{doc.description}</p>
+                                </CardContent>
+                            )}
+                        </Card>
+                    ))}
+                </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex justify-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                    >
+                        Previous
+                    </Button>
+                    <div className="flex items-center gap-2 px-4">
+                        <span className="text-sm text-muted-foreground">
+                            Page {currentPage} of {totalPages}
+                        </span>
+                    </div>
+                    <Button
+                        variant="outline"
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                    >
+                        Next
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}

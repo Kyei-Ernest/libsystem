@@ -1,0 +1,519 @@
+basePath: /api/v1
+definitions:
+  gorm.DeletedAt:
+    properties:
+      time:
+        type: string
+      valid:
+        description: Valid is true if Time is not NULL
+        type: boolean
+    type: object
+  handlers.AuthResponse:
+    properties:
+      token:
+        type: string
+      user: {}
+    type: object
+  handlers.LoginRequest:
+    properties:
+      email_or_username:
+        type: string
+      password:
+        type: string
+    required:
+    - email_or_username
+    - password
+    type: object
+  handlers.RegisterRequest:
+    properties:
+      email:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - email
+    - first_name
+    - last_name
+    - password
+    - username
+    type: object
+  models.Collection:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      description:
+        type: string
+      documents:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      id:
+        type: string
+      is_public:
+        type: boolean
+      metadata:
+        $ref: '#/definitions/models.MetadataSchema'
+      name:
+        type: string
+      owner:
+        $ref: '#/definitions/models.User'
+      owner_id:
+        type: string
+      settings:
+        $ref: '#/definitions/models.CollectionSettings'
+      slug:
+        type: string
+      stats:
+        allOf:
+        - $ref: '#/definitions/models.CollectionStats'
+        description: Not stored in DB, computed
+      updated_at:
+        type: string
+    type: object
+  models.CollectionSettings:
+    properties:
+      allow_public_submissions:
+        type: boolean
+      allowed_file_types:
+        items:
+          type: string
+        type: array
+      max_file_size:
+        type: integer
+      require_approval:
+        type: boolean
+    type: object
+  models.CollectionStats:
+    properties:
+      document_count:
+        type: integer
+      view_count:
+        type: integer
+    type: object
+  models.Document:
+    properties:
+      collection:
+        $ref: '#/definitions/models.Collection'
+      collection_id:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      description:
+        type: string
+      download_count:
+        type: integer
+      file_size:
+        type: integer
+      file_type:
+        description: PDF, HTML, DOCX, etc.
+        type: string
+      hash:
+        description: SHA-256 for deduplication
+        type: string
+      id:
+        type: string
+      indexed_at:
+        type: string
+      is_indexed:
+        description: Processing
+        type: boolean
+      language:
+        type: string
+      metadata:
+        allOf:
+        - $ref: '#/definitions/models.DocumentMetadata'
+        description: Metadata
+      mime_type:
+        type: string
+      original_filename:
+        description: File information
+        type: string
+      page_count:
+        type: integer
+      processing_error:
+        type: string
+      status:
+        $ref: '#/definitions/models.DocumentStatus'
+      storage_path:
+        description: S3 key or path
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      uploader:
+        $ref: '#/definitions/models.User'
+      uploader_id:
+        type: string
+      versions:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.DocumentVersion'
+        type: array
+      view_count:
+        description: Stats
+        type: integer
+    type: object
+  models.DocumentMetadata:
+    properties:
+      author:
+        type: string
+      custom_fields:
+        additionalProperties: true
+        type: object
+      isbn:
+        type: string
+      publish_date:
+        type: string
+      publisher:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  models.DocumentStatus:
+    enum:
+    - pending
+    - processing
+    - active
+    - rejected
+    - archived
+    type: string
+    x-enum-varnames:
+    - StatusPending
+    - StatusProcessing
+    - StatusActive
+    - StatusRejected
+    - StatusArchived
+  models.DocumentVersion:
+    properties:
+      change_log:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      document_id:
+        type: string
+      file_size:
+        type: integer
+      hash:
+        type: string
+      id:
+        type: string
+      storage_path:
+        type: string
+      updated_at:
+        type: string
+      version_number:
+        type: integer
+    type: object
+  models.MetadataSchema:
+    additionalProperties: true
+    type: object
+  models.User:
+    properties:
+      collections:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.Collection'
+        type: array
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      documents:
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      email:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_login_at:
+        type: string
+      last_name:
+        type: string
+      role:
+        $ref: '#/definitions/models.UserRole'
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  models.UserRole:
+    enum:
+    - admin
+    - librarian
+    - patron
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleLibrarian
+    - RolePatron
+  response.ErrorInfo:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties:
+          type: string
+        type: object
+      message:
+        type: string
+    type: object
+  response.Response:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/response.ErrorInfo'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  service.UserUpdate:
+    properties:
+      email:
+        type: string
+      firstName:
+        type: string
+      lastName:
+        type: string
+    type: object
+host: localhost:8086
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for User Management and Authentication
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: User Service API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      - application/json
+      description: |-
+        Authenticate user and return JWT token
+        Authenticate user and return JWT token
+      parameters:
+      - description: Login Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginRequest'
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "200":
+          description: Login successful
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/handlers.AuthResponse'
+              type: object
+        "400":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Login user
+      tags:
+      - auth
+      - auth
+  /auth/logout:
+    post:
+      description: Invalidate current session token
+      responses:
+        "200":
+          description: Logout successful
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Logout user
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      - application/json
+      description: |-
+        Register a new user with email, password, and personal details
+        Register a new user with email, password, and personal details
+      parameters:
+      - description: Registration Request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RegisterRequest'
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "201":
+          description: User registered successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/handlers.AuthResponse'
+              type: object
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/response.Response'
+        "409":
+          description: User already exists
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Register a new user
+      tags:
+      - auth
+      - auth
+  /users/{id}:
+    get:
+      description: |-
+        Get user details by their unique ID
+        Get user details by their unique ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "200":
+          description: User details
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - users
+      - users
+    put:
+      consumes:
+      - application/json
+      - application/json
+      description: |-
+        Update user's first name, last name, or email
+        Update user's first name, last name, or email
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Profile Updates
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.UserUpdate'
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "200":
+          description: Profile updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - users
+      - users
+swagger: "2.0"

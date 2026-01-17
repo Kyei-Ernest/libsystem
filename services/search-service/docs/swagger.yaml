@@ -1,0 +1,326 @@
+basePath: /api/v1/search
+definitions:
+  gorm.DeletedAt:
+    properties:
+      time:
+        type: string
+      valid:
+        description: Valid is true if Time is not NULL
+        type: boolean
+    type: object
+  models.Collection:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      description:
+        type: string
+      documents:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      id:
+        type: string
+      is_public:
+        type: boolean
+      metadata:
+        $ref: '#/definitions/models.MetadataSchema'
+      name:
+        type: string
+      owner:
+        $ref: '#/definitions/models.User'
+      owner_id:
+        type: string
+      settings:
+        $ref: '#/definitions/models.CollectionSettings'
+      slug:
+        type: string
+      stats:
+        allOf:
+        - $ref: '#/definitions/models.CollectionStats'
+        description: Not stored in DB, computed
+      updated_at:
+        type: string
+    type: object
+  models.CollectionSettings:
+    properties:
+      allow_public_submissions:
+        type: boolean
+      allowed_file_types:
+        items:
+          type: string
+        type: array
+      max_file_size:
+        type: integer
+      require_approval:
+        type: boolean
+    type: object
+  models.CollectionStats:
+    properties:
+      document_count:
+        type: integer
+      view_count:
+        type: integer
+    type: object
+  models.Document:
+    properties:
+      collection:
+        $ref: '#/definitions/models.Collection'
+      collection_id:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      description:
+        type: string
+      download_count:
+        type: integer
+      file_size:
+        type: integer
+      file_type:
+        description: PDF, HTML, DOCX, etc.
+        type: string
+      hash:
+        description: SHA-256 for deduplication
+        type: string
+      id:
+        type: string
+      indexed_at:
+        type: string
+      is_indexed:
+        description: Processing
+        type: boolean
+      language:
+        type: string
+      metadata:
+        allOf:
+        - $ref: '#/definitions/models.DocumentMetadata'
+        description: Metadata
+      mime_type:
+        type: string
+      original_filename:
+        description: File information
+        type: string
+      page_count:
+        type: integer
+      processing_error:
+        type: string
+      status:
+        $ref: '#/definitions/models.DocumentStatus'
+      storage_path:
+        description: S3 key or path
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      uploader:
+        $ref: '#/definitions/models.User'
+      uploader_id:
+        type: string
+      versions:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.DocumentVersion'
+        type: array
+      view_count:
+        description: Stats
+        type: integer
+    type: object
+  models.DocumentMetadata:
+    properties:
+      author:
+        type: string
+      custom_fields:
+        additionalProperties: true
+        type: object
+      isbn:
+        type: string
+      publish_date:
+        type: string
+      publisher:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  models.DocumentStatus:
+    enum:
+    - pending
+    - processing
+    - active
+    - rejected
+    - archived
+    type: string
+    x-enum-varnames:
+    - StatusPending
+    - StatusProcessing
+    - StatusActive
+    - StatusRejected
+    - StatusArchived
+  models.DocumentVersion:
+    properties:
+      change_log:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      document_id:
+        type: string
+      file_size:
+        type: integer
+      hash:
+        type: string
+      id:
+        type: string
+      storage_path:
+        type: string
+      updated_at:
+        type: string
+      version_number:
+        type: integer
+    type: object
+  models.MetadataSchema:
+    additionalProperties: true
+    type: object
+  models.User:
+    properties:
+      collections:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.Collection'
+        type: array
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      documents:
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      email:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_login_at:
+        type: string
+      last_name:
+        type: string
+      role:
+        $ref: '#/definitions/models.UserRole'
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  models.UserRole:
+    enum:
+    - admin
+    - librarian
+    - patron
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleLibrarian
+    - RolePatron
+  service.SearchResult:
+    properties:
+      hits:
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+host: localhost:8084
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for searching documents
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Search Service API
+  version: "1.0"
+paths:
+  /:
+    get:
+      consumes:
+      - application/json
+      description: Search for documents by query string
+      parameters:
+      - description: Query string
+        in: query
+        name: q
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Search results
+          schema:
+            $ref: '#/definitions/service.SearchResult'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Search documents
+      tags:
+      - search
+  /advanced:
+    get:
+      consumes:
+      - application/json
+      description: Advanced search options (currently alias for basic search)
+      parameters:
+      - description: Query string
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Search results
+          schema:
+            $ref: '#/definitions/service.SearchResult'
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Advanced search
+      tags:
+      - search
+swagger: "2.0"

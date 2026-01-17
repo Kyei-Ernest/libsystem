@@ -1,0 +1,138 @@
+basePath: /api/v1/analytics
+definitions:
+  repository.DailyActivity:
+    properties:
+      date:
+        type: string
+      downloads:
+        type: integer
+      views:
+        type: integer
+    type: object
+  repository.DocumentStats:
+    properties:
+      document_id:
+        type: string
+      download_count:
+        type: integer
+      title:
+        description: 'Note: We might not store title here, need to fetch or trust
+          upstream'
+        type: string
+      view_count:
+        type: integer
+    type: object
+  response.ErrorInfo:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties:
+          type: string
+        type: object
+      message:
+        type: string
+    type: object
+  response.Response:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/response.ErrorInfo'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+host: localhost:8087
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for system analytics and statistics
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Analytics Service API
+  version: "1.0"
+paths:
+  /activity:
+    get:
+      description: Get views and downloads over time
+      parameters:
+      - default: 7
+        description: Number of days
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Daily activity
+          schema:
+            items:
+              $ref: '#/definitions/repository.DailyActivity'
+            type: array
+        "400":
+          description: Invalid days
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get daily activity
+      tags:
+      - analytics
+  /documents/popular:
+    get:
+      description: Get most viewed/downloaded documents
+      parameters:
+      - default: 10
+        description: Limit results
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Top documents
+          schema:
+            items:
+              $ref: '#/definitions/repository.DocumentStats'
+            type: array
+        "400":
+          description: Invalid limit
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get top documents
+      tags:
+      - analytics
+  /overview:
+    get:
+      description: Get total views and downloads
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Overview stats
+          schema:
+            additionalProperties:
+              format: int64
+              type: integer
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get overview stats
+      tags:
+      - analytics
+swagger: "2.0"

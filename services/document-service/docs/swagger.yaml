@@ -1,0 +1,615 @@
+basePath: /api/v1
+definitions:
+  gorm.DeletedAt:
+    properties:
+      time:
+        type: string
+      valid:
+        description: Valid is true if Time is not NULL
+        type: boolean
+    type: object
+  models.Collection:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      description:
+        type: string
+      documents:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      id:
+        type: string
+      is_public:
+        type: boolean
+      metadata:
+        $ref: '#/definitions/models.MetadataSchema'
+      name:
+        type: string
+      owner:
+        $ref: '#/definitions/models.User'
+      owner_id:
+        type: string
+      settings:
+        $ref: '#/definitions/models.CollectionSettings'
+      slug:
+        type: string
+      stats:
+        allOf:
+        - $ref: '#/definitions/models.CollectionStats'
+        description: Not stored in DB, computed
+      updated_at:
+        type: string
+    type: object
+  models.CollectionSettings:
+    properties:
+      allow_public_submissions:
+        type: boolean
+      allowed_file_types:
+        items:
+          type: string
+        type: array
+      max_file_size:
+        type: integer
+      require_approval:
+        type: boolean
+    type: object
+  models.CollectionStats:
+    properties:
+      document_count:
+        type: integer
+      view_count:
+        type: integer
+    type: object
+  models.Document:
+    properties:
+      collection:
+        $ref: '#/definitions/models.Collection'
+      collection_id:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      description:
+        type: string
+      download_count:
+        type: integer
+      file_size:
+        type: integer
+      file_type:
+        description: PDF, HTML, DOCX, etc.
+        type: string
+      hash:
+        description: SHA-256 for deduplication
+        type: string
+      id:
+        type: string
+      indexed_at:
+        type: string
+      is_indexed:
+        description: Processing
+        type: boolean
+      language:
+        type: string
+      metadata:
+        allOf:
+        - $ref: '#/definitions/models.DocumentMetadata'
+        description: Metadata
+      mime_type:
+        type: string
+      original_filename:
+        description: File information
+        type: string
+      page_count:
+        type: integer
+      processing_error:
+        type: string
+      status:
+        $ref: '#/definitions/models.DocumentStatus'
+      storage_path:
+        description: S3 key or path
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      uploader:
+        $ref: '#/definitions/models.User'
+      uploader_id:
+        type: string
+      versions:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.DocumentVersion'
+        type: array
+      view_count:
+        description: Stats
+        type: integer
+    type: object
+  models.DocumentMetadata:
+    properties:
+      author:
+        type: string
+      custom_fields:
+        additionalProperties: true
+        type: object
+      isbn:
+        type: string
+      publish_date:
+        type: string
+      publisher:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  models.DocumentStatus:
+    enum:
+    - pending
+    - processing
+    - active
+    - rejected
+    - archived
+    type: string
+    x-enum-varnames:
+    - StatusPending
+    - StatusProcessing
+    - StatusActive
+    - StatusRejected
+    - StatusArchived
+  models.DocumentVersion:
+    properties:
+      change_log:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      document_id:
+        type: string
+      file_size:
+        type: integer
+      hash:
+        type: string
+      id:
+        type: string
+      storage_path:
+        type: string
+      updated_at:
+        type: string
+      version_number:
+        type: integer
+    type: object
+  models.MetadataSchema:
+    additionalProperties: true
+    type: object
+  models.User:
+    properties:
+      collections:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.Collection'
+        type: array
+      created_at:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      documents:
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      email:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_login_at:
+        type: string
+      last_name:
+        type: string
+      role:
+        $ref: '#/definitions/models.UserRole'
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  models.UserRole:
+    enum:
+    - admin
+    - librarian
+    - patron
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleLibrarian
+    - RolePatron
+  response.ErrorInfo:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties:
+          type: string
+        type: object
+      message:
+        type: string
+    type: object
+  response.Response:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/response.ErrorInfo'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  service.DocumentUpdate:
+    properties:
+      description:
+        type: string
+      metadata:
+        $ref: '#/definitions/models.DocumentMetadata'
+      title:
+        type: string
+    type: object
+host: localhost:8081
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for managing documents and file storage
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Document Service API
+  version: "1.0"
+paths:
+  /documents:
+    get:
+      description: List documents with pagination and filters
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Search term
+        in: query
+        name: search
+        type: string
+      - description: Document status
+        in: query
+        name: status
+        type: string
+      - description: File type
+        in: query
+        name: file_type
+        type: string
+      - description: Collection ID
+        in: query
+        name: collection_id
+        type: string
+      - description: Uploader ID
+        in: query
+        name: uploader_id
+        type: string
+      - description: Filter by indexing status
+        in: query
+        name: is_indexed
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of documents
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Document'
+                  type: array
+              type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: List documents
+      tags:
+      - documents
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a document file with metadata
+      parameters:
+      - description: Document file
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Document title
+        in: formData
+        name: title
+        required: true
+        type: string
+      - description: Document description
+        in: formData
+        name: description
+        type: string
+      - description: Collection ID
+        in: formData
+        name: collection_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Document uploaded
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Document'
+              type: object
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Upload a new document
+      tags:
+      - documents
+  /documents/{id}:
+    delete:
+      description: Delete a document (uploader or admin only)
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Document deleted
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete document
+      tags:
+      - documents
+    get:
+      description: Get document details
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Document details
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Document'
+              type: object
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Document not found
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get document by ID
+      tags:
+      - documents
+    put:
+      consumes:
+      - application/json
+      description: Update document metadata
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.DocumentUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Document updated
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Document'
+              type: object
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update document
+      tags:
+      - documents
+  /documents/{id}/download:
+    post:
+      description: Increment download count
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Download recorded
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Record document download
+      tags:
+      - documents
+  /documents/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update document status (admin/system only)
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update (status field)
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Status updated
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Invalid input
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update document status
+      tags:
+      - documents
+  /documents/{id}/view:
+    post:
+      description: Increment view count
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: View recorded
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Record document view
+      tags:
+      - documents
+swagger: "2.0"

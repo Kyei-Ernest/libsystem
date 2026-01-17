@@ -1,0 +1,91 @@
+# Prometheus Configuration for LibSystem
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'libsystem-local'
+    environment: 'development'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['localhost:8080']
+        labels:
+          service: 'api-gateway'
+
+  # User Service
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['localhost:8086']
+        labels:
+          service: 'user-service'
+
+  # Document Service
+  - job_name: 'document-service'
+    static_configs:
+      - targets: ['localhost:8081']
+        labels:
+          service: 'document-service'
+
+  # Collection Service
+  - job_name: 'collection-service'
+    static_configs:
+      - targets: ['localhost:8082']
+        labels:
+          service: 'collection-service'
+
+  # Search Service
+  - job_name: 'search-service'
+    static_configs:
+      - targets: ['localhost:8084']
+        labels:
+          service: 'search-service'
+
+  # Indexer Service
+  - job_name: 'indexer-service'
+    static_configs:
+      - targets: ['localhost:8085']
+        labels:
+          service: 'indexer-service'
+
+  # Analytics Service
+  - job_name: 'analytics-service'
+    static_configs:
+      - targets: ['localhost:8087']
+        labels:
+          service: 'analytics-service'
+
+  # PostgreSQL
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['localhost:9187']
+        labels:
+          service: 'postgresql'
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:9121']
+        labels:
+          service: 'redis'
+
+  # Elasticsearch
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['localhost:9114']
+        labels:
+          service: 'elasticsearch'

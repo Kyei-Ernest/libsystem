@@ -1,0 +1,376 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: libsystem-postgres
+    environment:
+      POSTGRES_DB: libsystem
+      POSTGRES_USER: libsystem
+      POSTGRES_PASSWORD: libsystem_dev_pass
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "5433:5432" # Expose on 5433 to avoid conflict with local postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U libsystem" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - libsystem-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: libsystem-redis
+    command: redis-server --appendonly yes --requirepass libsystem_redis_pass
+    ports:
+      - "6380:6379" # FIXED: Redis runs on 6379 inside container, exposed as 6380 on host
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "libsystem_redis_pass", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - libsystem-network
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: libsystem-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - libsystem-network
+
+  # Kibana (for Elasticsearch management)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: libsystem-kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - libsystem-network
+
+  # MinIO (S3-compatible object storage)
+  minio:
+    image: minio/minio:latest
+    container_name: libsystem-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - libsystem-network
+
+  # Kafka (for event streaming)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: libsystem-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - libsystem-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: libsystem-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092" # FIXED: Expose the host listener port
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # FIXED: Corrected advertised listeners - internal at 29092, external at 9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - libsystem-network
+
+  # Prometheus (metrics collection)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: libsystem-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - libsystem-network
+
+  # Search Service
+  search-service:
+    build:
+      context: .
+      dockerfile: ./services/search-service/Dockerfile
+    container_name: libsystem-search-service
+    environment:
+      PORT: "8084"
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - "8084:8084"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - libsystem-network
+    restart: unless-stopped
+
+  # Grafana (metrics visualization)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: libsystem-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infrastructure/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - libsystem-network
+
+  # Jaeger (distributed tracing)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: libsystem-jaeger
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    networks:
+      - libsystem-network
+
+  # API Gateway Service
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: libsystem-api-gateway
+    environment:
+      PORT: "8085" # Application listens on port 8085
+      ENVIRONMENT: development
+      # FIXED: Updated Redis URL to use correct internal port 6379
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: libsystem
+      DB_PASSWORD: libsystem_dev_pass
+      DB_NAME: libsystem
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: libsystem_redis_pass
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      LOG_LEVEL: debug
+    ports:
+      - "8085:8085" # FIXED: Consistent port mapping (avoids nginx conflict on 8080)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    volumes:
+      - ./services/api-gateway:/app
+    networks:
+      - libsystem-network
+    restart: unless-stopped
+
+  # User Service
+  user-service:
+    build:
+      context: .
+      dockerfile: ./services/user-service/Dockerfile
+    container_name: libsystem-user-service
+    environment:
+      PORT: "8080" # User service on port 8080
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: libsystem
+      DB_PASSWORD: libsystem_dev_pass
+      DB_NAME: libsystem
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+    ports:
+      - "8086:8080" # FIXED: Map to 8086 on host to avoid nginx conflict
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/user-service:/app
+    networks:
+      - libsystem-network
+    restart: unless-stopped
+
+  # Collection Service
+  collection-service:
+    build:
+      context: .
+      dockerfile: ./services/collection-service/Dockerfile
+    container_name: libsystem-collection-service
+    environment:
+      PORT: "8082" # Collection service on port 8082
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: libsystem
+      DB_PASSWORD: libsystem_dev_pass
+      DB_NAME: libsystem
+    ports:
+      - "8082:8082" # Consistent port mapping
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/collection-service:/app
+    networks:
+      - libsystem-network
+    restart: unless-stopped
+
+  # Document Service (handles file processing)
+  document-service:
+    build:
+      context: .
+      dockerfile: ./services/document-service/Dockerfile
+    container_name: libsystem-document-service
+    environment:
+      PORT: "8081" # Application listens on port 8081
+      # FIXED: Updated to use individual DB env vars instead of DATABASE_URL
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: libsystem
+      DB_PASSWORD: libsystem_dev_pass
+      DB_NAME: libsystem
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: libsystem_redis_pass
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      KAFKA_BROKERS: kafka:29092
+    ports:
+      - "8081:8081" # Consistent port mapping
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    volumes:
+      - ./services/document-service:/app
+    networks:
+      - libsystem-network
+    restart: unless-stopped
+
+  # Indexer Service (background indexing worker)
+  indexer-service:
+    build:
+      context: .
+      dockerfile: ./services/indexer-service/Dockerfile
+    container_name: libsystem-indexer-service
+    environment:
+      # FIXED: Updated to use individual DB env vars
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: libsystem
+      DB_PASSWORD: libsystem_dev_pass
+      DB_NAME: libsystem
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      KAFKA_BROKERS: kafka:29092
+      WORKER_CONCURRENCY: "4"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    volumes:
+      - ./services/indexer-service:/app
+    networks:
+      - libsystem-network
+    restart: unless-stopped
+
+networks:
+  libsystem-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

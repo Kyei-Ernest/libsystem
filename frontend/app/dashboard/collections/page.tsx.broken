@@ -1,0 +1,340 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { collectionsApi, type CollectionCreateRequest } from '@/lib/api/collections';
+import { useAuthStore } from '@/stores/auth-store';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+import { FolderOpen, Plus, Search, Lock, Globe, Trash2, Edit } from 'lucide-react';
+import type { Collection } from '@/types/api';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+
+export default function CollectionsPage() {
+    const router = useRouter();
+    const { user } = useAuthStore();
+    const [collections, setCollections] = useState<Collection[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Only admin and librarian can create collections
+    const canCreateCollection = user?.role === 'admin' || user?.role === 'librarian';
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
+    const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
+
+    // Collection form state
+    const [formData, setFormData] = useState<CollectionCreateRequest>({
+        name: '',
+        description: '',
+        is_public: true,
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        loadCollections();
+    }, [currentPage, searchQuery]);
+
+    const loadCollections = async () => {
+        try {
+            setIsLoading(true);
+            const response = await collectionsApi.list({
+                page: currentPage,
+                page_size: 12,
+                search: searchQuery || undefined,
+            });
+
+            setCollections(response.data || []);
+            setTotalPages(response.pagination?.total_pages || 1);
+        } catch (error) {
+            console.error('Failed to load collections:', error);
+            toast.error('Failed to load collections');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!formData.name.trim()) {
+            toast.error('Collection name is required');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            await collectionsApi.create(formData);
+            toast.success('Collection created successfully');
+            setIsCreateSheetOpen(false);
+            resetForm();
+            loadCollections();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to create collection';
+            toast.error(message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleUpdate = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!editingCollection || !formData.name.trim()) {
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            await collectionsApi.update(editingCollection.id, formData);
+            toast.success('Collection updated successfully');
+            setEditingCollection(null);
+            resetForm();
+            loadCollections();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to update collection';
+            toast.error(message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDelete = async (id: string, name: string) => {
+        if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+            return;
+        }
+
+        try {
+            await collectionsApi.delete(id);
+            toast.success('Collection deleted successfully');
+            loadCollections();
+        } catch (error) {
+            toast.error('Failed to delete collection');
+        }
+    };
+
+    const openEditSheet = (collection: Collection) => {
+        setEditingCollection(collection);
+        setFormData({
+            name: collection.name,
+            description: collection.description || '',
+            is_public: collection.is_public,
+        });
+    };
+
+    const resetForm = () => {
+        setFormData({
+            name: '',
+            description: '',
+            is_public: true,
+        });
+        setEditingCollection(null);
+    };
+
+    const CollectionForm = ({ onSubmit, isEditing }: { onSubmit: (e: React.FormEvent) => void; isEditing: boolean }) => (
+        <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Enter collection name"
+                    disabled={isSubmitting}
+                    required
+                />
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Enter collection description (optional)"
+                    disabled={isSubmitting}
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+            </div>
+
+            <div className="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    id="is_public"
+                    checked={formData.is_public}
+                    onChange={(e) => setFormData({ ...formData, is_public: e.target.checked })}
+                    disabled={isSubmitting}
+                    className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="is_public" className="cursor-pointer">
+                    Make this collection public
+                </Label>
+            </div>
+
+            <div className="flex gap-2">
+                <Button type="submit" disabled={isSubmitting} className="flex-1">
+                    {isSubmitting ? 'Saving...' : isEditing ? 'Update Collection' : 'Create Collection'}
+                </Button>
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                        setIsCreateSheetOpen(false);
+                        setEditingCollection(null);
+                        resetForm();
+                    }}
+                    disabled={isSubmitting}
+                >
+                    Cancel
+                </Button>
+            </div>
+        </form>
+    );
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Collections</h2>
+                    <p className="text-muted-foreground">Organize documents into collections</p>
+                </div>
+            </Card>
+            ) : collections.length === 0 ? (
+            <Card>
+                <CardContent className="pt-6 text-center">
+                    <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No collections found</h3>
+                    <p className="text-muted-foreground mb-4">
+                        {searchQuery ? 'Try adjusting your search' : 'Create your first collection to organize documents'}
+                    </p>
+                    {!searchQuery && (
+                        <Button onClick={() => setIsCreateSheetOpen(true)}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Collection
+                        </Button>
+                    )}
+                </CardContent>
+            </Card>
+            ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {collections.map((collection) => (
+                    <Card key={collection.id} className="hover:shadow-md transition-shadow">
+                        <CardHeader>
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                    <CardTitle className="text-lg truncate">{collection.name}</CardTitle>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        {collection.is_public ? (
+                                            <Badge variant="outline" className="text-xs">
+                                                <Globe className="mr-1 h-3 w-3" />
+                                                Public
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="text-xs">
+                                                <Lock className="mr-1 h-3 w-3" />
+                                                Private
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex gap-1">
+                                    <Sheet open={editingCollection?.id === collection.id} onOpenChange={(open) => {
+                                        if (!open) {
+                                            setEditingCollection(null);
+                                            resetForm();
+                                        }
+                                    }}>
+                                        <SheetTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openEditSheet(collection)}
+                                                title="Edit"
+                                            >
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                        </SheetTrigger>
+                                        <SheetContent>
+                                            <SheetHeader>
+                                                <SheetTitle>Edit Collection</SheetTitle>
+                                                <SheetDescription>
+                                                    Update collection details
+                                                </SheetDescription>
+                                            </SheetHeader>
+                                            <div className="mt-6">
+                                                <CollectionForm onSubmit={handleUpdate} isEditing={true} />
+                                            </div>
+                                        </form>
+                                    </SheetContent>
+                                </Sheet>
+                )}
+                            </div>et>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDelete(collection.id, collection.name)}
+                                title="Delete"
+                                className="text-red-600 hover:text-red-700"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                                    </CardHeader>
+            {collection.description && (
+                <CardContent className="pt-0">
+                    <CardDescription className="line-clamp-2">{collection.description}</CardDescription>
+                </CardContent>
+            )}
+            <CardContent className="pt-2 border-t">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => router.push(`/dashboard/collections/${collection.id}`)}
+                >
+                    View Documents →
+                </Button>
+            </CardContent>
+        </Card>
+    ))
+}
+        </div >
+    )
+}
+
+{/* Pagination */ }
+{
+    totalPages > 1 && (
+        <div className="flex justify-center gap-2">
+            <Button
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+            >
+                Previous
+            </Button>
+            <div className="flex items-center gap-2 px-4">
+                <span className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                </span>
+            </div>
+            <Button
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+            >
+                Next
+            </Button>
+        </div>
+    )
+}
+            </div >
+            );
+}

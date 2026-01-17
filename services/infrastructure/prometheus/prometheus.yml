@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8081']
+        labels:
+          service: 'api-gateway'
+  
+  - job_name: 'document-service'
+    static_configs:
+      - targets: ['document-service:8082']
+        labels:
+          service: 'document-service'
+  
+  - job_name: 'indexer-service'
+    static_configs:
+      - targets: ['indexer-service:8083']
+        labels:
+          service: 'indexer-service'
+  
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+  
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'

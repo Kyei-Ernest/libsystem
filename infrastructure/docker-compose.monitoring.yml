@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: libsystem-prometheus
+    volumes:
+      - ./infrastructure/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    networks:
+      - libsystem-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: libsystem-grafana
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+      - ./infrastructure/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    networks:
+      - libsystem-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+networks:
+  libsystem-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
